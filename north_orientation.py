@@ -5,14 +5,25 @@ from rasterio.features import rasterize
 from rasterio.transform import from_bounds
 import matplotlib.pyplot as plt
 
+print("STARTING...")
+
+# =====================================================
+# INPUT FILE
+# =====================================================
 
 input_file = r"F:\POA\Delhi_Building_Orientation.gpkg"
+
+# =====================================================
+# OUTPUT TIFF
+# =====================================================
 
 output_tif = r"F:\POA\Delhi_Building_Orientation_North.tif"
 
 # =====================================================
 # LOAD ONLY REQUIRED COLUMNS
 # =====================================================
+
+print("LOADING DATA...")
 
 gdf = gpd.read_file(
     input_file,
@@ -23,6 +34,8 @@ gdf = gpd.read_file(
 # REMOVE NULLS
 # =====================================================
 
+print("REMOVING NULLS...")
+
 gdf = gdf[
     gdf.geometry.notnull()
 ]
@@ -32,8 +45,10 @@ gdf = gdf[
 ]
 
 # =====================================================
-# PROJECT TO METRIC CRS FIRST
+# PROJECT TO METRIC CRS
 # =====================================================
+
+print("PROJECTING CRS...")
 
 gdf = gdf.to_crs("EPSG:32643")
 
@@ -41,15 +56,17 @@ gdf = gdf.to_crs("EPSG:32643")
 # REMOVE VERY SMALL BUILDINGS
 # =====================================================
 
+print("REMOVING SMALL BUILDINGS...")
+
 gdf = gdf[
     gdf.geometry.area > 20
 ]
 
 # =====================================================
-# CHECK FEATURE COUNT
+# FEATURE COUNT
 # =====================================================
 
-print("TOTAL BUILDINGS :", len(gdf))
+print("\nTOTAL BUILDINGS:", len(gdf))
 
 # =====================================================
 # RASTER RESOLUTION
@@ -63,6 +80,7 @@ pixel_size = 20
 
 minx, miny, maxx, maxy = gdf.total_bounds
 
+print("\nBOUNDS:")
 print(minx, miny, maxx, maxy)
 
 # =====================================================
@@ -72,7 +90,8 @@ print(minx, miny, maxx, maxy)
 width = int((maxx - minx) / pixel_size)
 height = int((maxy - miny) / pixel_size)
 
-print("Raster size:", width, height)
+print("\nRASTER SIZE:")
+print(width, height)
 
 # =====================================================
 # TRANSFORM
@@ -91,6 +110,8 @@ transform = from_bounds(
 # SHAPES
 # =====================================================
 
+print("\nPREPARING SHAPES...")
+
 shapes = (
     (geom, value)
     for geom, value in zip(
@@ -103,6 +124,8 @@ shapes = (
 # RASTERIZE
 # =====================================================
 
+print("\nRASTERIZING...")
+
 orientation_raster = rasterize(
     shapes=shapes,
     out_shape=(height, width),
@@ -114,6 +137,8 @@ orientation_raster = rasterize(
 # =====================================================
 # SAVE TIFF
 # =====================================================
+
+print("\nSAVING TIFF...")
 
 with rasterio.open(
     output_tif,
@@ -138,99 +163,113 @@ print("\nTIFF SAVED:")
 print(output_tif)
 
 # =====================================================
-# ADD HERE
+# FULL 360° BUILDING ORIENTATIONS
 # =====================================================
 
-# YOUR HISTOGRAM + CIRCULAR PLOT CODE
+print("\nPREPARING FULL 360° ORIENTATIONS...")
 
-# =====================================================
-# DISPLAY
-# =====================================================
-
-plt.figure(figsize=(10,10))
-
-# =====================================================
-# ORIENTATION VALUES
-# =====================================================
-
-angles = gdf["North Aligned"].values
-
-# =====================================================
-# CONVERT TO 0–180
-# =====================================================
-
-angles_180 = angles % 180
-
-# =====================================================
-# 10 DEGREE BINS
-# =====================================================
-
-bins = np.arange(0, 181, 10)
-
-# =====================================================
-# HISTOGRAM
-# =====================================================
-
-plt.figure(figsize=(12,6))
-
-plt.hist(
-    angles_180,
-    bins=bins,
-    edgecolor="black"
-)
-
-plt.xticks(bins)
-
-plt.xlabel("Orientation (Degrees)")
-plt.ylabel("Building Count")
-
-plt.title("180° Building Orientation Histogram")
-
-plt.grid(True)
-
-plt.show()
-
-
-# =====================================================
-# FULL 360° ROSE DIAGRAM
-# =====================================================
-
-print("CREATING FULL ROSE DIAGRAM...")
-
-# Original angles
+# Original orientations
 angles = gdf["North Aligned"].values
 
 # Convert to 0–180
 angles = angles % 180
 
-# Duplicate to make full circular symmetry
+# Duplicate to full 360°
 angles_full = np.concatenate([
     angles,
     angles + 180
 ])
 
-# Bins every 10 degrees
-bins = np.arange(0, 361, 10)
+# =====================================================
+# SHIFTED 10° BINS
+# =====================================================
 
-# Histogram
+bins = np.arange(-5, 366, 10)
+
+# =====================================================
+# FULL 360° HISTOGRAM
+# =====================================================
+
+print("\nCREATING HISTOGRAM...")
+
+plt.figure(figsize=(14,6))
+
+plt.hist(
+    angles_full,
+    bins=bins,
+    edgecolor="black",
+    rwidth=0.9
+)
+
+# Clean x labels
+plt.xticks(
+    np.arange(0, 361, 30)
+)
+
+plt.xlabel("Building Orientation (Degrees)")
+plt.ylabel("Building Count")
+
+plt.title(
+    "Full 360° Building Orientation Histogram"
+)
+
+plt.grid(True)
+
+plt.show()
+
+# =====================================================
+# FULL 360° ROSE DIAGRAM
+# =====================================================
+
+print("\nCREATING FULL ROSE DIAGRAM...")
+
+# Histogram for rose diagram
 counts, bin_edges = np.histogram(
     angles_full,
     bins=bins
 )
 
-# Bin centers
+# =====================================================
+# FORCE SYMMETRY (VISUAL ONLY)
+# =====================================================
+
+half = len(counts) // 2
+
+for i in range(half):
+
+    avg = (
+        counts[i] +
+        counts[i + half]
+    ) / 2
+
+    counts[i] = avg
+    counts[i + half] = avg
+
+# =====================================================
+# BIN CENTERS
+# =====================================================
+
 bin_centers = (
-    bin_edges[:-1] + bin_edges[1:]
+    bin_edges[:-1] +
+    bin_edges[1:]
 ) / 2
 
-# Convert to radians
-theta = np.deg2rad(bin_centers)
+# =====================================================
+# CONVERT TO RADIANS
+# =====================================================
 
-# Sector width
+theta = np.deg2rad(
+    bin_centers
+)
+
+# =====================================================
+# SECTOR WIDTH
+# =====================================================
+
 width = np.deg2rad(10)
 
 # =====================================================
-# POLAR PLOT
+# POLAR FIGURE
 # =====================================================
 
 fig = plt.figure(figsize=(10,10))
@@ -240,23 +279,41 @@ ax = fig.add_subplot(
     projection="polar"
 )
 
+# =====================================================
+# POLAR BARS
+# =====================================================
+
 bars = ax.bar(
     theta,
     counts,
     width=width,
-    bottom=0
+    bottom=0,
+    
 )
 
-# North on top
+# =====================================================
+# NORTH ON TOP
+# =====================================================
+
 ax.set_theta_zero_location("N")
 
-# Clockwise
+# =====================================================
+# CLOCKWISE ROTATION
+# =====================================================
+
 ax.set_theta_direction(-1)
 
-# Degree labels
+# =====================================================
+# CLEAN DEGREE LABELS
+# =====================================================
+
 ax.set_thetagrids(
     np.arange(0, 360, 30)
 )
+
+# =====================================================
+# TITLE
+# =====================================================
 
 ax.set_title(
     "Full 360° Building Orientation Rose Diagram",
@@ -265,3 +322,5 @@ ax.set_title(
 )
 
 plt.show()
+
+print("\nDONE.")
