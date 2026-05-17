@@ -1,9 +1,24 @@
+# -*- coding: utf-8 -*-
+"""
+FULL BUILDING ORIENTATION ANALYSIS
+
+OUTPUTS:
+1. Orientation Raster
+2. Full 360° Histogram
+3. Full 360° Rose Diagram
+4. Shannon Entropy
+5. Orientation Order (phi)
+
+@author: harshi
+"""
+
 import geopandas as gpd
 import numpy as np
 import rasterio
 from rasterio.features import rasterize
 from rasterio.transform import from_bounds
 import matplotlib.pyplot as plt
+from scipy.stats import entropy
 
 print("STARTING...")
 
@@ -11,16 +26,16 @@ print("STARTING...")
 # INPUT FILE
 # =====================================================
 
-input_file = r"F:\POA\Delhi_Building_Orientation.gpkg"
+input_file = r"F:\POA\Delhi_Building_Footprints.gpkg"
 
 # =====================================================
 # OUTPUT TIFF
 # =====================================================
 
-output_tif = r"F:\POA\Delhi_Building_Orientation_North.tif"
+output_tif = r"F:\POA\Building_Orientation_North.tif"
 
 # =====================================================
-# LOAD ONLY REQUIRED COLUMNS
+# LOAD DATA
 # =====================================================
 
 print("LOADING DATA...")
@@ -163,18 +178,48 @@ print("\nTIFF SAVED:")
 print(output_tif)
 
 # =====================================================
-# FULL 360° BUILDING ORIENTATIONS
+# DISPLAY ORIENTATION RASTER
 # =====================================================
 
-print("\nPREPARING FULL 360° ORIENTATIONS...")
+print("\nDISPLAYING ORIENTATION RASTER...")
 
-# Original orientations
+plt.figure(figsize=(10,10))
+
+plt.imshow(
+    orientation_raster,
+    cmap="hsv"
+)
+
+plt.colorbar(
+    label="Orientation wrt North"
+)
+
+plt.title(
+    "Building Orientation Raster"
+)
+
+plt.axis("off")
+
+plt.show()
+
+# =====================================================
+# BUILDING ORIENTATIONS
+# =====================================================
+
+print("\nPREPARING ORIENTATIONS...")
+
 angles = gdf["North Aligned"].values
 
-# Convert to 0–180
+# =====================================================
+# CONVERT TO 0–180
+# =====================================================
+
 angles = angles % 180
 
-# Duplicate to full 360°
+# =====================================================
+# DUPLICATE TO FULL 360°
+# =====================================================
+
 angles_full = np.concatenate([
     angles,
     angles + 180
@@ -185,6 +230,73 @@ angles_full = np.concatenate([
 # =====================================================
 
 bins = np.arange(-5, 366, 10)
+
+# =====================================================
+# HISTOGRAM COUNTS
+# =====================================================
+
+counts, edges = np.histogram(
+    angles_full,
+    bins=bins
+)
+
+# =====================================================
+# REMOVE EMPTY BINS
+# =====================================================
+
+counts_nonzero = counts[
+    counts > 0
+]
+
+# =====================================================
+# PROBABILITIES
+# =====================================================
+
+probabilities = (
+    counts_nonzero /
+    counts_nonzero.sum()
+)
+
+# =====================================================
+# SHANNON ENTROPY
+# =====================================================
+
+H = entropy(
+    probabilities,
+    base=np.e
+)
+
+print("\n===================================")
+print("SHANNON ENTROPY")
+print("===================================")
+
+print(H)
+
+# =====================================================
+# MAXIMUM ENTROPY
+# =====================================================
+
+n_bins = 36
+
+Hmax = np.log(n_bins)
+
+print("\n===================================")
+print("MAXIMUM ENTROPY")
+print("===================================")
+
+print(Hmax)
+
+# =====================================================
+# NORMALIZED ORIENTATION ORDER
+# =====================================================
+
+phi = 1 - (H / Hmax)
+
+print("\n===================================")
+print("NORMALIZED ORIENTATION ORDER")
+print("===================================")
+
+print(phi)
 
 # =====================================================
 # FULL 360° HISTOGRAM
@@ -201,7 +313,7 @@ plt.hist(
     rwidth=0.9
 )
 
-# Clean x labels
+# clean labels
 plt.xticks(
     np.arange(0, 361, 30)
 )
@@ -221,37 +333,37 @@ plt.show()
 # FULL 360° ROSE DIAGRAM
 # =====================================================
 
-print("\nCREATING FULL ROSE DIAGRAM...")
+print("\nCREATING ROSE DIAGRAM...")
 
-# Histogram for rose diagram
-counts, bin_edges = np.histogram(
+# histogram again for rose
+counts_rose, edges_rose = np.histogram(
     angles_full,
     bins=bins
 )
 
 # =====================================================
-# FORCE SYMMETRY (VISUAL ONLY)
+# OPTIONAL SYMMETRY FIX
 # =====================================================
 
-half = len(counts) // 2
+half = len(counts_rose) // 2
 
 for i in range(half):
 
     avg = (
-        counts[i] +
-        counts[i + half]
+        counts_rose[i] +
+        counts_rose[i + half]
     ) / 2
 
-    counts[i] = avg
-    counts[i + half] = avg
+    counts_rose[i] = avg
+    counts_rose[i + half] = avg
 
 # =====================================================
 # BIN CENTERS
 # =====================================================
 
-bin_centers = (
-    bin_edges[:-1] +
-    bin_edges[1:]
+centers = (
+    edges_rose[:-1] +
+    edges_rose[1:]
 ) / 2
 
 # =====================================================
@@ -259,7 +371,7 @@ bin_centers = (
 # =====================================================
 
 theta = np.deg2rad(
-    bin_centers
+    centers
 )
 
 # =====================================================
@@ -283,12 +395,11 @@ ax = fig.add_subplot(
 # POLAR BARS
 # =====================================================
 
-bars = ax.bar(
+ax.bar(
     theta,
-    counts,
+    counts_rose,
     width=width,
-    bottom=0,
-    
+    bottom=0
 )
 
 # =====================================================
@@ -298,13 +409,13 @@ bars = ax.bar(
 ax.set_theta_zero_location("N")
 
 # =====================================================
-# CLOCKWISE ROTATION
+# CLOCKWISE
 # =====================================================
 
 ax.set_theta_direction(-1)
 
 # =====================================================
-# CLEAN DEGREE LABELS
+# DEGREE LABELS
 # =====================================================
 
 ax.set_thetagrids(
@@ -322,5 +433,31 @@ ax.set_title(
 )
 
 plt.show()
+
+# =====================================================
+# FINAL INTERPRETATION
+# =====================================================
+
+print("\n===================================")
+print("INTERPRETATION")
+print("===================================")
+
+if phi > 0.75:
+
+    print(
+        "Highly ordered building orientation pattern."
+    )
+
+elif phi > 0.5:
+
+    print(
+        "Moderately ordered building orientation pattern."
+    )
+
+else:
+
+    print(
+        "Highly disordered/random building orientation pattern."
+    )
 
 print("\nDONE.")
